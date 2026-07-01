@@ -1,0 +1,14 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+.vercel/
+
+# large raw AI generation outputs (optimized copies live in public/)
+meshy_output/
+*_log.txt
+
+# keep screenshot evidence out of the repo
+artifacts/

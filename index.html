@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c212e" />
+    <meta
+      name="description"
+      content="TrenchField — a fast browser voxel shooter. Deploy, fight bots in a dusk-lit trench arena, earn Trench Points."
+    />
+    <title>TrenchField — Voxel Trench Shooter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="in-menu">
+    <script>
+      window.__PAGE_ERRORS__ = [];
+      window.addEventListener('error', (e) => {
+        window.__PAGE_ERRORS__.push(`${e.message} @ ${e.filename}:${e.lineno}`);
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__PAGE_ERRORS__.push(`rejection: ${e.reason}`);
+      });
+    </script>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="TrenchField game canvas"></canvas>
+      <div id="screen-vignette" aria-hidden="true"></div>
+      <div id="film-grain" aria-hidden="true"></div>
+      <div id="damage-vignette" aria-hidden="true"></div>
+
+      <!-- ============ HUD ============ -->
+      <section id="hud" class="hidden" aria-live="polite">
+        <div id="crosshair" aria-hidden="true">
+          <span class="ch-line ch-t"></span><span class="ch-line ch-b"></span>
+          <span class="ch-line ch-l"></span><span class="ch-line ch-r"></span>
+          <span class="ch-dot"></span>
+        </div>
+        <div id="hitmarker" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+
+        <div id="match-timer">5:00</div>
+
+        <div id="tp-cluster">
+          <div class="tp-label">TRENCH&nbsp;POINTS</div>
+          <div class="tp-row">
+            <span class="tp-diamond"></span>
+            <span id="tp-value">0</span>
+          </div>
+          <div id="tp-session" class="tp-session">+0</div>
+        </div>
+
+        <div id="killfeed"></div>
+
+        <div id="health-cluster">
+          <div class="dogtag-chain" aria-hidden="true"></div>
+          <div class="health-plate">
+            <span class="plate-label">VITALS</span>
+            <div class="health-bar"><div id="health-fill"></div></div>
+            <span id="health-num" class="plate-num">100</span>
+          </div>
+        </div>
+
+        <div id="ammo-cluster">
+          <span id="weapon-name">M-27 TRENCH RIFLE</span>
+          <div class="ammo-row">
+            <span id="ammo-mag">30</span>
+            <span class="ammo-sep">/</span>
+            <span id="ammo-reserve">150</span>
+          </div>
+          <div class="ammo-sub">
+            <div id="grenade-pip" title="Grenade [G]"><span class="pip-icon">G</span></div>
+            <span class="slot-hints">[1] RIFLE&nbsp;&nbsp;[2] SCATTERGUN</span>
+          </div>
+        </div>
+
+        <div id="reload-hint">RELOADING…</div>
+        <div id="score-pop"></div>
+        <div id="streak-banner"></div>
+        <div id="hud-toast"></div>
+
+        <div id="scoreboard">
+          <h3>FRONTLINE-7 — DEATHMATCH</h3>
+          <table>
+            <thead>
+              <tr><th>#</th><th>OPERATOR</th><th>CLASS</th><th>K</th><th>D</th><th>TP</th></tr>
+            </thead>
+            <tbody id="scoreboard-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ LANDING ============ -->
+      <section id="screen-landing" class="screen active">
+        <div class="landing-topbar">
+          <span class="brand-mark">TF</span>
+          <span class="topbar-room">ROOM <strong>FRONTLINE-7</strong> · CREATOR ROOM</span>
+          <span class="topbar-live"><span class="live-dot"></span>ARENA LIVE</span>
+        </div>
+
+        <div class="landing-grid">
+          <div class="landing-hero">
+            <p class="hero-eyebrow">BROWSER VOXEL SHOOTER · NO INSTALL · INSTANT ACTION</p>
+            <h1 class="hero-title">TRENCH<span>FIELD</span></h1>
+            <p class="hero-tag">
+              Five minutes. One dusk-lit trench arena. Seven guns barking across no-man's-land.
+              Drop in, take the top slot, walk out with Trench Points.
+            </p>
+            <button id="btn-deploy" class="btn-primary" type="button">
+              <span class="btn-flash"></span>DEPLOY
+            </button>
+            <div class="controls-strip">
+              <span><kbd>W A S D</kbd> move</span>
+              <span><kbd>MOUSE</kbd> aim · fire</span>
+              <span><kbd>R-CLICK</kbd> sights</span>
+              <span><kbd>SHIFT</kbd> sprint</span>
+              <span><kbd>G</kbd> grenade</span>
+              <span><kbd>TAB</kbd> score</span>
+            </div>
+          </div>
+
+          <aside class="landing-cards">
+            <div class="card card-points">
+              <div class="card-head">
+                <span class="card-title">TRENCH POINTS</span>
+                <span class="chip-devnet">SOLANA · DEVNET PREVIEW</span>
+              </div>
+              <div class="points-balance">
+                <span class="tp-diamond big"></span>
+                <span id="wallet-value">0</span>
+                <span class="points-unit">TP</span>
+              </div>
+              <p class="card-note">
+                Earned per kill, streak and headshot. Banked to your local wallet after every
+                match — on-chain settlement is mocked in this prototype.
+              </p>
+              <div class="wallet-row">
+                <button id="wallet-connect" class="btn-ghost" type="button">CONNECT WALLET</button>
+                <span id="wallet-address" class="wallet-address">Not connected</span>
+              </div>
+            </div>
+
+            <div class="card card-room">
+              <div class="card-head">
+                <span class="card-title">CREATOR ROOM</span>
+                <span class="room-cut">5% CUT</span>
+              </div>
+              <div class="room-owner">
+                <span class="owner-avatar">TL</span>
+                <div>
+                  <div class="owner-name">TrenchLord.sol</div>
+                  <div class="owner-sub">room owner · earns 5% of all TP generated here</div>
+                </div>
+              </div>
+              <ul id="room-feed" class="room-feed"></ul>
+            </div>
+          </aside>
+        </div>
+
+        <div class="landing-footer">
+          <span>TRENCHFIELD v0.1 PROTOTYPE — single-player vs bots · multiplayer &amp; on-chain points on the roadmap</span>
+        </div>
+      </section>
+
+      <!-- ============ PAUSE ============ -->
+      <section id="screen-pause" class="screen">
+        <div class="panel">
+          <h2 class="panel-title">HOLD FIRE</h2>
+          <button id="btn-resume" class="btn-primary compact" type="button">RESUME</button>
+          <div class="settings">
+            <label>
+              <span>SENSITIVITY</span>
+              <input id="setting-sensitivity" type="range" min="0.3" max="2.5" step="0.1" value="1" />
+            </label>
+            <label>
+              <span>VOLUME</span>
+              <input id="setting-volume" type="range" min="0" max="1" step="0.05" value="0.8" />
+            </label>
+            <label class="check">
+              <input id="setting-mute" type="checkbox" />
+              <span>MUTE ALL</span>
+            </label>
+          </div>
+          <div class="pause-controls">
+            <p><kbd>W A S D</kbd> move · <kbd>SPACE</kbd> jump · <kbd>C</kbd> crouch · <kbd>R</kbd> reload · <kbd>G</kbd> grenade · <kbd>1/2</kbd> weapons</p>
+          </div>
+          <button id="btn-quit" class="btn-ghost" type="button">ABANDON MATCH</button>
+        </div>
+      </section>
+
+      <!-- ============ DEATH ============ -->
+      <section id="screen-death" class="screen">
+        <div class="death-wrap">
+          <h2 class="death-title">KILLED IN ACTION</h2>
+          <p class="death-sub">taken out by <span id="death-killer">—</span></p>
+          <div class="death-timer">REDEPLOY IN <span id="death-countdown">3.0s</span></div>
+          <button id="btn-redeploy" class="btn-primary compact" type="button" disabled>REDEPLOY</button>
+        </div>
+      </section>
+
+      <!-- ============ END ============ -->
+      <section id="screen-end" class="screen">
+        <div class="panel wide">
+          <p class="end-eyebrow">ARTILLERY BARRAGE — MATCH OVER</p>
+          <div id="end-placement" class="end-placement"></div>
+          <div class="end-stats">
+            <div class="stat"><span class="stat-label">K / D</span><span id="end-kd">0 / 0</span></div>
+            <div class="stat"><span class="stat-label">EARNED</span><span id="end-tp" class="tp-green">+0 TP</span></div>
+            <div class="stat"><span class="stat-label">CREATOR CUT</span><span id="end-creator-cut">0 TP</span></div>
+          </div>
+          <table class="end-table">
+            <thead>
+              <tr><th>#</th><th>OPERATOR</th><th>K</th><th>D</th><th>TP</th></tr>
+            </thead>
+            <tbody id="end-standings-body"></tbody>
+          </table>
+          <div class="end-actions">
+            <button id="btn-play-again" class="btn-primary compact" type="button">PLAY AGAIN</button>
+            <button id="btn-end-menu" class="btn-ghost" type="button">BACK TO BASE</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
