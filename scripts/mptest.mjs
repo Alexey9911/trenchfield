@@ -26,7 +26,9 @@ await p1.waitForFunction(
 );
 console.log('p1 connected to frontline');
 
-// p1 creates a free lobby via the real UI
+// p1 creates a free lobby via the real UI (switch to multiplayer mode first)
+await p1.click('#mode-mp');
+await p2.click('#mode-mp');
 await p1.click('#btn-create-lobby');
 await p1.fill('#create-title', 'E2E TEST');
 await p1.click('#create-confirm');

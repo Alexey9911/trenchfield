@@ -1,7 +1,8 @@
 import { Match, type RosterEntry } from '../game/Match';
-import { MATCH, type MapId } from '../game/constants';
+import { MATCH, SKINS, SKIN_ORDER, type MapId, type SkinId } from '../game/constants';
 
 export type ScreenName = 'landing' | 'pause' | 'death' | 'end' | null;
+export type GameMode = 'solo' | 'mp';
 
 export interface ScreenCallbacks {
   onDeploy: () => void;
@@ -12,6 +13,9 @@ export interface ScreenCallbacks {
   onVolume: (v: number) => void;
   onMute: (muted: boolean) => void;
   onMapSelect: (id: MapId) => void;
+  onModeChange: (mode: GameMode) => void;
+  onNickChange: (nick: string) => void;
+  onSkinChange: (skin: SkinId) => void;
   onUiClick: () => void;
 }
 
@@ -38,8 +42,10 @@ export class Screens {
   private endCreatorCut = el<HTMLSpanElement>('end-creator-cut');
   private endKd = el<HTMLSpanElement>('end-kd');
   current: ScreenName = 'landing';
+  mode: GameMode = 'solo';
+  private skinIndex = 0;
 
-  constructor(cb: ScreenCallbacks) {
+  constructor(private cb: ScreenCallbacks) {
     el<HTMLButtonElement>('btn-deploy').addEventListener('click', () => {
       cb.onUiClick();
       cb.onDeploy();
@@ -80,7 +86,61 @@ export class Screens {
       });
     }
 
+    // mode toggle
+    el<HTMLButtonElement>('mode-solo').addEventListener('click', () => {
+      cb.onUiClick();
+      this.setMode('solo');
+    });
+    el<HTMLButtonElement>('mode-mp').addEventListener('click', () => {
+      cb.onUiClick();
+      this.setMode('mp');
+    });
+
+    // nickname
+    const nick = el<HTMLInputElement>('nick-input');
+    nick.value = localStorage.getItem('tf-nick') ?? '';
+    nick.addEventListener('change', () => cb.onNickChange(nick.value));
+    nick.addEventListener('blur', () => cb.onNickChange(nick.value));
+
+    // skin selector
+    const savedSkin = (localStorage.getItem('tf-skin') as SkinId | null) ?? 'olive';
+    this.skinIndex = Math.max(0, SKIN_ORDER.indexOf(savedSkin));
+    el<HTMLButtonElement>('skin-prev').addEventListener('click', () => {
+      cb.onUiClick();
+      this.cycleSkin(-1);
+    });
+    el<HTMLButtonElement>('skin-next').addEventListener('click', () => {
+      cb.onUiClick();
+      this.cycleSkin(1);
+    });
+    this.renderSkin();
+
     this.refreshWallet();
+  }
+
+  private setMode(mode: GameMode): void {
+    this.mode = mode;
+    el('mode-solo').classList.toggle('active', mode === 'solo');
+    el('mode-mp').classList.toggle('active', mode === 'mp');
+    el('panel-solo').classList.toggle('hidden', mode !== 'solo');
+    el('panel-mp').classList.toggle('hidden', mode !== 'mp');
+    this.cb.onModeChange(mode);
+  }
+
+  private cycleSkin(dir: number): void {
+    this.skinIndex = (this.skinIndex + dir + SKIN_ORDER.length) % SKIN_ORDER.length;
+    this.renderSkin();
+    this.cb.onSkinChange(SKIN_ORDER[this.skinIndex]);
+  }
+
+  private renderSkin(): void {
+    const skin = SKINS[SKIN_ORDER[this.skinIndex]];
+    el('skin-name').textContent = skin.name;
+    el('skin-blurb').textContent = skin.blurb;
+  }
+
+  setIdTag(tag: string): void {
+    el('id-tag').textContent = tag;
   }
 
   refreshWallet(): void {

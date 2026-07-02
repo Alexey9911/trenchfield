@@ -175,8 +175,17 @@ export class NetClient {
     });
   }
 
-  hello(nick: string, wallet: string | null, token: string | null): Promise<{ ok?: boolean; authed?: boolean }> {
-    return this.emitCb('hello', { nick, wallet, token });
+  hello(
+    nick: string,
+    wallet: string | null,
+    token: string | null,
+    guestId?: string,
+  ): Promise<{ ok?: boolean; authed?: boolean }> {
+    return this.emitCb('hello', { nick, wallet, token, guestId });
+  }
+
+  reportSolo(kills: number, deaths: number): void {
+    this.socket?.emit('soloResult', { kills, deaths });
   }
 
   walletNonce(wallet: string): Promise<{ nonce?: string; message?: string; error?: string }> {

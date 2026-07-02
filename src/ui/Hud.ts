@@ -32,6 +32,10 @@ export class Hud {
   private scoreboardBody = el<HTMLTableSectionElement>('scoreboard-body');
   private reloadHint = el<HTMLDivElement>('reload-hint');
   private toast = el<HTMLDivElement>('hud-toast');
+  private lockHint = el<HTMLDivElement>('lock-hint');
+  private liveLbBody = el<HTMLOListElement>('live-lb-body');
+  private tpLabel = el<HTMLDivElement>('tp-label');
+  private scoreboardTitle = el<HTMLHeadingElement>('scoreboard-title');
   private lowHealthActive = false;
   private hitmarkerTimeout = 0;
   private scorePopTimeout = 0;
@@ -40,6 +44,32 @@ export class Hud {
 
   setVisible(v: boolean): void {
     this.root.classList.toggle('hidden', !v);
+  }
+
+  setLockHint(show: boolean): void {
+    this.lockHint.classList.toggle('show', show);
+  }
+
+  /** points cluster label + scoreboard title differ for solo vs multiplayer */
+  setMode(mode: 'solo' | 'mp', pointsLabel: string, scoreboardTitle: string): void {
+    void mode;
+    this.tpLabel.innerHTML = pointsLabel;
+    this.scoreboardTitle.textContent = scoreboardTitle;
+  }
+
+  /** compact always-on standings (top 5). */
+  setLiveLeaderboard(entries: RosterEntry[]): void {
+    const top = entries.slice(0, 5);
+    this.liveLbBody.innerHTML = top
+      .map(
+        (e, i) => `
+        <li class="${e.isPlayer ? 'you' : ''}">
+          <span class="lb-rank">${i + 1}</span>
+          <span class="lb-name">${e.name}</span>
+          <span class="lb-k">${e.kills}</span>
+        </li>`,
+      )
+      .join('');
   }
 
   reset(): void {

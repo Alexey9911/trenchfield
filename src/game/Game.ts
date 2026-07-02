@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { Engine } from '../core/Engine';
 import { Input } from '../core/Input';
+import { TouchControls } from '../core/TouchControls';
 import { AudioManager } from '../core/AudioManager';
+import { Identity } from './Identity';
 import { VoxelWorld, BLOCK } from '../world/VoxelWorld';
 import { buildTrenchArena, type MapLayout } from '../world/MapBuilder';
 import { Sky } from '../world/Sky';
@@ -24,10 +26,13 @@ import {
   GRENADES,
   MAPS,
   PLAYER,
+  SKIN_ORDER,
   SMOKE_CLOUD,
   WORLD,
   type MapId,
+  type SkinId,
   clamp,
+  damp,
   lerp,
   rand,
   type WeaponSpec,
@@ -62,6 +67,7 @@ export class Game {
   private mpStateAccum = 0;
   private mpStandings: SnapshotPlayer[] = [];
   private mpNicks = new Map<string, string>();
+  private identity = new Identity();
   private player: PlayerController;
   private weapons: WeaponSystem;
   private bots: Bot[] = [];
@@ -74,6 +80,10 @@ export class Game {
   private state: GameState = 'menu';
   private respawnTimer = 0;
   private menuCamAngle = 0;
+  private showcaseSkinId: SkinId = 'olive';
+  private menuAnchor = new THREE.Vector3(WORLD.sizeX / 2, 7, WORLD.sizeZ / 2);
+  private menuRadius = 44;
+  private menuHeight = 18;
   private testMode = false;
   private announcedLead = false;
   private spreadPx = 12;
@@ -83,6 +93,8 @@ export class Game {
     this.engine = new Engine(canvas);
     this.input = new Input(canvas);
     this.input.testMode = this.testMode;
+    // sets up mobile touch input listeners as a side effect
+    new TouchControls(this.input, canvas);
 
     // --- world ---
     const savedMap = localStorage.getItem('trenchfield-map');
@@ -165,16 +177,32 @@ export class Game {
       onVolume: (v) => this.audio.setVolume(v),
       onMute: (m) => this.audio.setMuted(m),
       onMapSelect: (id) => this.setMap(id),
+      onModeChange: () => {
+        // Screens toggles the solo/mp panels; deploy is solo-only, MP via lobby
+      },
+      onNickChange: (nick) => {
+        this.identity.setNick(nick);
+        this.screens.setIdTag(this.identity.shortTag);
+        void this.net.hello(this.identity.nick, this.identity.walletAddress, null, this.identity.deviceId);
+      },
+      onSkinChange: (skin) => {
+        this.identity.setSkin(skin);
+        this.setSkinPreview(skin);
+      },
       onUiClick: () => {
         this.audio.unlock();
         this.audio.play('uiClick', { volume: 0.5 });
       },
     });
     this.screens.setSelectedMap(this.mapId);
+    this.screens.setIdTag(this.identity.shortTag);
+    this.setSkinPreview(this.identity.skin);
 
     // --- bots ---
     this.match.register(PLAYER_ID, 'YOU', true, 'OPERATOR');
-    const archetypeOrder = ['rifleman', 'shock', 'scout', 'rifleman', 'scout', 'shock'] as const;
+    // first 3 bots wear the 3 player skins in order (olive/scout/ironclad) so
+    // the menu showcase camera can orbit a bot wearing each skin
+    const archetypeOrder = ['rifleman', 'scout', 'shock', 'rifleman', 'scout', 'shock'] as const;
     for (let i = 0; i < BOTS.count; i++) {
       const archetype = BOT_ARCHETYPES[archetypeOrder[i % archetypeOrder.length]];
       const bot = new Bot(
@@ -189,8 +217,27 @@ export class Game {
     }
 
     this.input.onPause = () => {
-      if (this.state === 'playing') this.screens.show('pause');
+      // lock lost while playing: in MP we can't pause the match, so show a
+      // "click to look" hint instead of a blocking pause menu
+      if (this.state !== 'playing') return;
+      if (this.mpActive) {
+        this.hud.setLockHint(true);
+      } else {
+        this.screens.show('pause');
+      }
     };
+    this.input.onLockChange = (locked) => {
+      if (locked) this.hud.setLockHint(false);
+    };
+
+    // click-to-look: if playing but pointer lock was lost (Esc, tab-out), a
+    // click on the canvas re-acquires it instead of leaving the player stuck
+    canvas.addEventListener('click', () => {
+      if (this.state === 'playing' && this.screens.current === null && !this.input.isLocked) {
+        this.input.requestLock();
+        this.hud.setLockHint(false);
+      }
+    });
 
     this.setupMultiplayer();
     this.loadImportedAssets();
@@ -405,7 +452,12 @@ export class Game {
         this.audio.unlock();
         this.audio.play('uiClick', { volume: 0.5 });
       },
-      getNick: () => localStorage.getItem('tf-nick') ?? `operator-${Math.floor(Math.random() * 999)}`,
+      getNick: () => this.identity.nick,
+      getGuestId: () => this.identity.deviceId,
+      onWalletChange: (addr) => {
+        this.identity.walletAddress = addr;
+        this.screens.setIdTag(this.identity.shortTag);
+      },
     });
     if (this.net.available) this.net.connect();
     else this.mpUI.setConnection(false);
@@ -438,6 +490,11 @@ export class Game {
     this.weapons.setRigVisible(true);
     this.screens.show(null);
     this.hud.setVisible(true);
+    this.hud.setMode(
+      'mp',
+      info.mode === 'wager' ? 'SOL&nbsp;POT' : 'FRONTLINE',
+      `${info.mode === 'wager' ? `◎ ${info.stake} WAGER` : 'FRIENDLY'} · DEATHMATCH`,
+    );
     this.audio.play('uiDeploy', { volume: 0.8 });
     this.audio.play('voWelcome', { volume: 0.9 });
     if (!this.testMode) this.input.requestLock();
@@ -468,6 +525,7 @@ export class Game {
 
   private onMpDeath(killerName: string): void {
     this.state = 'dead';
+    this.input.releaseLock();
     this.audio.play('playerDeath', { volume: 0.9 });
     this.screens.setDeathInfo(killerName);
     this.screens.show('death');
@@ -670,6 +728,7 @@ export class Game {
     this.weapons.setRigVisible(true);
     this.screens.show(null);
     this.hud.setVisible(true);
+    this.hud.setMode('solo', 'TRENCH&nbsp;POINTS', `${MAPS[this.mapId].label} · SKIRMISH`);
     this.hud.setPoints(Match.walletBalance() + this.match.pointsEarned, this.match.pointsEarned);
     this.audio.play('uiDeploy', { volume: 0.8 });
     this.input.requestLock();
@@ -724,6 +783,9 @@ export class Game {
     this.weapons.setRigVisible(false);
     this.input.releaseLock();
     Match.addToWallet(this.match.pointsEarned);
+    // feed solo kills/deaths into the global leaderboard (keyed by identity)
+    const you = this.match.roster.get(PLAYER_ID);
+    if (you && this.net.connected) this.net.reportSolo(you.kills, you.deaths);
     this.screens.setEndResults(
       this.match.standings(),
       this.match.playerPlacement(),
@@ -738,6 +800,7 @@ export class Game {
   private onPlayerDeath(killerName: string): void {
     this.state = 'dead';
     this.respawnTimer = 3;
+    this.input.releaseLock(); // free the mouse so Redeploy is clickable
     this.audio.play('playerDeath', { volume: 0.9 });
     this.screens.setDeathInfo(killerName);
     this.screens.show('death');
@@ -1170,21 +1233,53 @@ export class Game {
     this.publishDiagnostics();
   }
 
+  /** Which skin the menu camera is showcasing (orbits the matching bot). */
+  setSkinPreview(skinId: SkinId): void {
+    this.showcaseSkinId = skinId;
+  }
+
   private updateMenuCamera(dt: number): void {
-    this.menuCamAngle += dt * 0.06;
-    const cx = WORLD.sizeX / 2;
-    const cz = WORLD.sizeZ / 2;
-    const r = 44;
     const cam = this.engine.camera;
-    cam.position.set(
-      cx + Math.cos(this.menuCamAngle) * r,
-      24 + Math.sin(this.menuCamAngle * 0.6) * 3,
-      cz + Math.sin(this.menuCamAngle) * r,
-    );
     cam.rotation.order = 'YXZ';
-    cam.lookAt(cx, 7, cz);
-    if (cam.fov !== 58) {
-      cam.fov = 58;
+    const arenaCenter = new THREE.Vector3(WORLD.sizeX / 2, 7, WORLD.sizeZ / 2);
+
+    // pick the showcase bot for the selected skin (3rd-person orbit on it)
+    const skinIndex = SKIN_ORDER.indexOf(this.showcaseSkinId);
+    const showcaseBot = this.bots[skinIndex] ?? null;
+    const showcasing = showcaseBot != null && this.showcaseSkinId !== null;
+
+    // desired anchor + orbit radius, smoothed so switching skins glides over
+    let desiredAnchor: THREE.Vector3;
+    let desiredRadius: number;
+    let desiredHeight: number;
+    if (showcasing) {
+      desiredAnchor = showcaseBot.chestPosition;
+      desiredRadius = 4.6;
+      desiredHeight = 1.4;
+    } else {
+      desiredAnchor = arenaCenter;
+      desiredRadius = 44;
+      desiredHeight = 18;
+    }
+
+    this.menuAnchor.x = damp(this.menuAnchor.x, desiredAnchor.x, 3.5, dt);
+    this.menuAnchor.y = damp(this.menuAnchor.y, desiredAnchor.y, 3.5, dt);
+    this.menuAnchor.z = damp(this.menuAnchor.z, desiredAnchor.z, 3.5, dt);
+    this.menuRadius = damp(this.menuRadius, desiredRadius, 2.6, dt);
+    this.menuHeight = damp(this.menuHeight, desiredHeight, 2.6, dt);
+    // slower orbit for the intimate skin view, wide sweep for the arena
+    this.menuCamAngle += dt * (showcasing ? 0.42 : 0.06);
+
+    cam.position.set(
+      this.menuAnchor.x + Math.cos(this.menuCamAngle) * this.menuRadius,
+      this.menuAnchor.y + this.menuHeight,
+      this.menuAnchor.z + Math.sin(this.menuCamAngle) * this.menuRadius,
+    );
+    cam.lookAt(this.menuAnchor.x, this.menuAnchor.y + (showcasing ? 0.2 : 0), this.menuAnchor.z);
+
+    const targetFov = showcasing ? 46 : 58;
+    if (Math.abs(cam.fov - targetFov) > 0.1) {
+      cam.fov = damp(cam.fov, targetFov, 3, dt);
       cam.updateProjectionMatrix();
     }
   }
@@ -1270,24 +1365,25 @@ export class Game {
       const m = Math.floor(left / 60);
       const s = Math.floor(left % 60);
       this.hud.setTimer(`${m}:${String(s).padStart(2, '0')}`, left < 30);
-      this.hud.setScoreboard(
-        [...this.mpStandings]
-          .sort((a, b) => b.k - a.k || a.d - b.d)
-          .map((p) => ({
-            id: p.id,
-            name: p.id === this.net.myId() ? 'YOU' : (this.mpNicks.get(p.id) ?? 'operator'),
-            isPlayer: p.id === this.net.myId(),
-            archetypeLabel: 'OPERATOR',
-            kills: p.k,
-            deaths: p.d,
-            score: p.k * 100,
-            streak: 0,
-          })),
-        intents.scoreboard,
-      );
+      const standings = [...this.mpStandings]
+        .sort((a, b) => b.k - a.k || a.d - b.d)
+        .map((p) => ({
+          id: p.id,
+          name: p.id === this.net.myId() ? 'YOU' : (this.mpNicks.get(p.id) ?? 'operator'),
+          isPlayer: p.id === this.net.myId(),
+          archetypeLabel: 'OPERATOR',
+          kills: p.k,
+          deaths: p.d,
+          score: p.k * 100,
+          streak: 0,
+        }));
+      this.hud.setScoreboard(standings, intents.scoreboard);
+      this.hud.setLiveLeaderboard(standings);
     } else {
       this.hud.setTimer(this.match.formatTime(), this.match.timeLeft < 30);
-      this.hud.setScoreboard(this.match.standings(), intents.scoreboard);
+      const standings = this.match.standings();
+      this.hud.setScoreboard(standings, intents.scoreboard);
+      this.hud.setLiveLeaderboard(standings);
     }
   }
 

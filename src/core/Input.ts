@@ -33,6 +33,17 @@ export class Input {
   /** Test hook: when true, look can be driven without pointer lock. */
   testMode = false;
 
+  // --- touch state (mobile), set by TouchControls; merged into intents ---
+  touchMode = false;
+  touchMoveX = 0; // strafe -1..1
+  touchMoveY = 0; // forward -1..1
+  touchFire = false;
+  touchAds = false;
+  private touchJumpPressed = false;
+  private touchReloadPressed = false;
+  private touchGrenadePressed = false;
+  private touchSlotPressed: 1 | 2 | 3 | null = null;
+
   constructor(private canvas: HTMLCanvasElement) {
     document.addEventListener('keydown', this.onKeyDown);
     document.addEventListener('keyup', this.onKeyUp);
@@ -45,15 +56,25 @@ export class Input {
   }
 
   get isLocked(): boolean {
-    return this.locked || this.testMode;
+    return this.locked || this.testMode || this.touchMode;
   }
 
   requestLock(): void {
-    if (this.testMode) {
+    if (this.testMode || this.touchMode) {
       this.onLockChange(true);
       return;
     }
     this.canvas.requestPointerLock();
+  }
+
+  // touch button hooks
+  pressTouchJump(): void { this.touchJumpPressed = true; }
+  pressTouchReload(): void { this.touchReloadPressed = true; }
+  pressTouchGrenade(): void { this.touchGrenadePressed = true; }
+  pressTouchSlot(slot: 1 | 2 | 3): void { this.touchSlotPressed = slot; }
+  addTouchLook(dx: number, dy: number): void {
+    this.yawDelta -= dx * 0.006;
+    this.pitchDelta -= dy * 0.006;
   }
 
   releaseLock(): void {
@@ -61,19 +82,24 @@ export class Input {
   }
 
   consume(): InputIntents {
+    const kbForward = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
+    const kbStrafe = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
     const intents: InputIntents = {
-      forward: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
-      strafe: (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
-      sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
-      jump: this.keys.has('Space'),
+      forward: kbForward !== 0 ? kbForward : this.touchMoveY,
+      strafe: kbStrafe !== 0 ? kbStrafe : this.touchMoveX,
+      sprint:
+        this.keys.has('ShiftLeft') ||
+        this.keys.has('ShiftRight') ||
+        this.touchMoveY > 0.85,
+      jump: this.keys.has('Space') || this.touchJumpPressed,
       crouch: this.keys.has('KeyC') || this.keys.has('ControlLeft'),
-      fire: this.fireHeld,
-      ads: this.adsHeld,
-      reload: this.reloadPressed,
-      grenade: this.grenadePressed,
+      fire: this.fireHeld || this.touchFire,
+      ads: this.adsHeld || this.touchAds,
+      reload: this.reloadPressed || this.touchReloadPressed,
+      grenade: this.grenadePressed || this.touchGrenadePressed,
       smoke: this.smokePressed,
       flash: this.flashPressed,
-      weaponSlot: this.slotPressed,
+      weaponSlot: this.slotPressed ?? this.touchSlotPressed,
       scoreboard: this.keys.has('Tab'),
     };
     this.reloadPressed = false;
@@ -81,6 +107,10 @@ export class Input {
     this.smokePressed = false;
     this.flashPressed = false;
     this.slotPressed = null;
+    this.touchJumpPressed = false;
+    this.touchReloadPressed = false;
+    this.touchGrenadePressed = false;
+    this.touchSlotPressed = null;
     return intents;
   }
 

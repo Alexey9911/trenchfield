@@ -23,6 +23,8 @@ const esc = (s: string): string =>
 export interface MultiplayerUICallbacks {
   onUiClick: () => void;
   getNick: () => string;
+  getGuestId: () => string;
+  onWalletChange: (addr: string | null) => void;
 }
 
 export class MultiplayerUI {
@@ -90,7 +92,10 @@ export class MultiplayerUI {
       e.stopPropagation();
     });
     el<HTMLButtonElement>('chat-toggle').addEventListener('click', () => {
-      el('chat-dock').classList.toggle('collapsed');
+      const dock = el('chat-dock');
+      // on mobile the toggle closes the sheet; on desktop it collapses
+      if (dock.classList.contains('mobile-open')) dock.classList.remove('mobile-open');
+      else dock.classList.toggle('collapsed');
     });
     for (const tab of document.querySelectorAll<HTMLButtonElement>('.chat-tab')) {
       tab.addEventListener('click', () => {
@@ -108,6 +113,12 @@ export class MultiplayerUI {
         this.renderLeaderboard();
       });
     }
+
+    // mobile chat launcher: opens the dock as a bottom sheet
+    el<HTMLButtonElement>('chat-fab').addEventListener('click', () => {
+      el('chat-dock').classList.add('mobile-open');
+      el('chat-dock').classList.remove('collapsed');
+    });
   }
 
   private async openWalletChooser(): Promise<void> {
@@ -149,7 +160,8 @@ export class MultiplayerUI {
           this.authToken = auth.token;
           localStorage.setItem('tf-wallet', address);
           localStorage.setItem('tf-token', auth.token);
-          await this.net.hello(this.cb.getNick(), address, auth.token);
+          await this.net.hello(this.cb.getNick(), address, auth.token, this.cb.getGuestId());
+          this.cb.onWalletChange(address);
         }
       }
       await this.refreshWalletPanel();
@@ -162,15 +174,16 @@ export class MultiplayerUI {
     const wallet = localStorage.getItem('tf-wallet');
     const token = localStorage.getItem('tf-token');
     if (wallet && token) {
-      const res = await this.net.hello(this.cb.getNick(), wallet, token);
+      const res = await this.net.hello(this.cb.getNick(), wallet, token, this.cb.getGuestId());
       if (res.authed) {
         this.walletAddress = wallet;
         this.authToken = token;
+        this.cb.onWalletChange(wallet);
         await this.refreshWalletPanel();
         return;
       }
     }
-    await this.net.hello(this.cb.getNick(), null, null);
+    await this.net.hello(this.cb.getNick(), null, null, this.cb.getGuestId());
   }
 
   private async refreshWalletPanel(): Promise<void> {

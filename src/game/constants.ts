@@ -336,6 +336,43 @@ export const BOT_NAMES = [
   'Periscope Pete',
 ] as const;
 
+export type SkinId = 'olive' | 'scout' | 'ironclad';
+
+export interface PlayerSkin {
+  id: SkinId;
+  name: string;
+  blurb: string;
+  /** archetype whose voxel body + palette this skin reuses for previews/remotes */
+  archetype: 'rifleman' | 'scout' | 'shock';
+  swatch: number;
+}
+
+export const SKINS: Record<SkinId, PlayerSkin> = {
+  olive: {
+    id: 'olive',
+    name: 'OLIVE REGULAR',
+    blurb: 'Standard-issue trench kit. Brodie helmet, webbing, mud-caked boots.',
+    archetype: 'rifleman',
+    swatch: 0x6b7040,
+  },
+  scout: {
+    id: 'scout',
+    name: 'DESERT SCOUT',
+    blurb: 'Light and fast. Soft cap, bedroll, sun-bleached fatigues.',
+    archetype: 'scout',
+    swatch: 0x9a8a62,
+  },
+  ironclad: {
+    id: 'ironclad',
+    name: 'IRONCLAD',
+    blurb: 'Heavy assault plate. Stahlhelm, chest armor, no-nonsense.',
+    archetype: 'shock',
+    swatch: 0x5a4032,
+  },
+};
+
+export const SKIN_ORDER: SkinId[] = ['olive', 'scout', 'ironclad'];
+
 export type BotArchetypeId = 'rifleman' | 'shock' | 'scout';
 
 export interface BotArchetype {

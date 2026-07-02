@@ -415,7 +415,7 @@ io.on('connection', (socket) => {
     socket.handshake.headers['fly-client-ip'] ||
     socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
     socket.handshake.address;
-  sessions.set(socket.id, { nick: 'operator', wallet: null, authed: false, lobbyCode: null, ip });
+  sessions.set(socket.id, { nick: 'operator', wallet: null, guestId: null, authed: false, lobbyCode: null, ip });
   socket.emit('meta', metaPayload());
   broadcastMeta();
 
@@ -433,6 +433,7 @@ io.on('connection', (socket) => {
     const s = sess();
     const nick = String(data?.nick || 'operator').slice(0, 16);
     s.nick = nickAllowed(nick) ? nick : 'operator';
+    if (data?.guestId) s.guestId = String(data.guestId).slice(0, 24);
     if (data?.wallet && data?.token) {
       const expect = crypto.createHmac('sha256', SESSION_SECRET).update(String(data.wallet)).digest('hex');
       if (data.token === expect) {
@@ -750,6 +751,20 @@ io.on('connection', (socket) => {
         applyKill(l, p, victim);
       }
     }
+  });
+
+  // --- solo (vs bots) results feed the global kills leaderboard ---
+  socket.on('soloResult', async (data) => {
+    const s = sess();
+    const key = s.wallet || s.guestId;
+    if (!key) return;
+    const kills = Math.max(0, Math.min(200, Number(data?.kills) || 0));
+    const deaths = Math.max(0, Math.min(200, Number(data?.deaths) || 0));
+    if (kills === 0 && deaths === 0) return;
+    await db.upsertPlayer(key, s.nick).catch(() => {});
+    await db.addKillsDeaths(key, kills, deaths).catch(() => {});
+    await refreshLeaderboards();
+    broadcastMeta();
   });
 
   // --- chat ---
