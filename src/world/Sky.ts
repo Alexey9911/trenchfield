@@ -1,18 +1,19 @@
 import * as THREE from 'three';
-import { RENDER, WORLD } from '../game/constants';
+import { RENDER, WORLD, type MapTheme } from '../game/constants';
 
 /**
- * Dusk sky: gradient dome shader, low amber sun with glow, silhouette hill
- * ring, drifting cloud cards and the key/fill light rig.
+ * Themed sky: gradient dome shader with sun/moon disc, silhouette hill ring,
+ * drifting cloud cards, optional stars, and the key/fill light rig.
  */
 export class Sky {
   readonly group = new THREE.Group();
-  readonly sunDir = new THREE.Vector3(-0.55, 0.42, -0.79).normalize();
+  readonly sunDir: THREE.Vector3;
   readonly keyLight: THREE.DirectionalLight;
   private clouds: THREE.Mesh[] = [];
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, theme: MapTheme) {
     this.group.name = 'sky';
+    this.sunDir = new THREE.Vector3(-0.55, theme.sunDirY, -0.79).normalize();
     const center = new THREE.Vector3(WORLD.sizeX / 2, 0, WORLD.sizeZ / 2);
 
     // --- gradient dome -----------------------------------------------------
@@ -22,11 +23,16 @@ export class Sky {
       depthWrite: false,
       fog: false,
       uniforms: {
-        zenith: { value: new THREE.Color(0x241f38) },
-        mid: { value: new THREE.Color(0x5d4460) },
-        horizon: { value: new THREE.Color(0xd9772f) },
+        zenith: { value: new THREE.Color(theme.zenith) },
+        mid: { value: new THREE.Color(theme.mid) },
+        horizon: { value: new THREE.Color(theme.horizon) },
         sunDir: { value: this.sunDir.clone() },
-        sunColor: { value: new THREE.Color(0xffc46b) },
+        sunColor: { value: new THREE.Color(theme.discColor) },
+        haze: { value: new THREE.Vector3(...theme.hazeColor) },
+        corePow: { value: theme.discCorePow },
+        coreStrength: { value: theme.discCoreStrength },
+        haloPow: { value: theme.discHaloPow },
+        haloStrength: { value: theme.discHaloStrength },
       },
       vertexShader: /* glsl */ `
         varying vec3 vDir;
@@ -41,6 +47,11 @@ export class Sky {
         uniform vec3 horizon;
         uniform vec3 sunDir;
         uniform vec3 sunColor;
+        uniform vec3 haze;
+        uniform float corePow;
+        uniform float coreStrength;
+        uniform float haloPow;
+        uniform float haloStrength;
         varying vec3 vDir;
         void main() {
           float h = clamp(vDir.y, -0.05, 1.0);
@@ -48,10 +59,9 @@ export class Sky {
             ? mix(horizon, mid, smoothstep(-0.05, 0.22, h))
             : mix(mid, zenith, smoothstep(0.22, 0.85, h));
           float sunAmt = max(dot(normalize(vDir), sunDir), 0.0);
-          col += sunColor * pow(sunAmt, 24.0) * 0.55;   // halo
-          col += sunColor * pow(sunAmt, 220.0) * 1.6;   // hot core
-          // faint band of smoke haze near the horizon
-          col = mix(col, vec3(0.42, 0.30, 0.24), smoothstep(0.16, 0.0, h) * 0.35);
+          col += sunColor * pow(sunAmt, haloPow) * haloStrength;
+          col += sunColor * pow(sunAmt, corePow) * coreStrength;
+          col = mix(col, haze, smoothstep(0.16, 0.0, h) * 0.35);
           gl_FragColor = vec4(col, 1.0);
         }
       `,
@@ -63,17 +73,11 @@ export class Sky {
 
     // --- silhouette hills ring ---------------------------------------------
     const hillMat = new THREE.MeshBasicMaterial({
-      color: 0x2e2030,
+      color: theme.hillColor,
       fog: false,
       side: THREE.BackSide,
     });
-    const hillPts: THREE.Vector2[] = [];
-    const segments = 64;
-    for (let i = 0; i <= segments; i++) {
-      hillPts.push(new THREE.Vector2(150, 0));
-    }
-    void hillPts;
-    const hillGeo = new THREE.CylinderGeometry(150, 150, 26, segments, 4, true);
+    const hillGeo = new THREE.CylinderGeometry(150, 150, 26, 64, 4, true);
     const pos = hillGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
@@ -92,6 +96,39 @@ export class Sky {
     hills.renderOrder = -9;
     this.group.add(hills);
 
+    // --- stars (night) -------------------------------------------------------
+    if (theme.stars) {
+      const starCount = 420;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i++) {
+        // upper hemisphere only
+        const u = Math.random();
+        const v = Math.random() * 0.85 + 0.08;
+        const phi = u * Math.PI * 2;
+        const y = v;
+        const r = Math.sqrt(Math.max(0, 1 - y * y));
+        starPos[i * 3] = center.x + Math.cos(phi) * r * 225;
+        starPos[i * 3 + 1] = y * 225;
+        starPos[i * 3 + 2] = center.z + Math.sin(phi) * r * 225;
+      }
+      const starGeo = new THREE.BufferGeometry();
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const stars = new THREE.Points(
+        starGeo,
+        new THREE.PointsMaterial({
+          color: 0xd8e2ff,
+          size: 1.4,
+          sizeAttenuation: false,
+          transparent: true,
+          opacity: 0.85,
+          fog: false,
+          depthWrite: false,
+        }),
+      );
+      stars.renderOrder = -9;
+      this.group.add(stars);
+    }
+
     // --- cloud cards ---------------------------------------------------------
     const cloudTex = Sky.makeCloudTexture();
     for (let i = 0; i < 7; i++) {
@@ -99,10 +136,10 @@ export class Sky {
       const cloudMat = new THREE.MeshBasicMaterial({
         map: cloudTex,
         transparent: true,
-        opacity: 0.5,
+        opacity: theme.cloudOpacity,
         depthWrite: false,
         fog: false,
-        color: i % 2 === 0 ? 0x8a6a80 : 0xc08668,
+        color: i % 2 === 0 ? theme.cloudColorA : theme.cloudColorB,
       });
       const cloud = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 0.28), cloudMat);
       const a = (i / 7) * Math.PI * 2 + Math.random();
@@ -118,7 +155,7 @@ export class Sky {
     }
 
     // --- lighting rig --------------------------------------------------------
-    this.keyLight = new THREE.DirectionalLight(0xffb45e, 3.2);
+    this.keyLight = new THREE.DirectionalLight(theme.keyColor, theme.keyIntensity);
     this.keyLight.position.copy(center.clone().addScaledVector(this.sunDir, 90));
     this.keyLight.target.position.copy(center);
     this.keyLight.castShadow = true;
@@ -134,10 +171,10 @@ export class Sky {
     this.keyLight.shadow.normalBias = 0.03;
     this.group.add(this.keyLight, this.keyLight.target);
 
-    const hemi = new THREE.HemisphereLight(0x6a5f8a, 0x54402c, 1.55);
+    const hemi = new THREE.HemisphereLight(theme.hemiSky, theme.hemiGround, theme.hemiIntensity);
     this.group.add(hemi);
 
-    const rim = new THREE.DirectionalLight(0x6a5a9a, 0.65);
+    const rim = new THREE.DirectionalLight(theme.rimColor, theme.rimIntensity);
     rim.position.copy(center.clone().add(new THREE.Vector3(40, 30, 70)));
     rim.target.position.copy(center);
     this.group.add(rim, rim.target);
@@ -164,9 +201,9 @@ export class Sky {
         ctx.fillRect(x - r, y - r, r * 2, r * 2);
       }
     }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
   }
 
   update(dt: number): void {
@@ -175,5 +212,9 @@ export class Sky {
       cloud.position.x += dt * (0.4 + i * 0.07);
       if (cloud.position.x > WORLD.sizeX / 2 + 200) cloud.position.x -= 400;
     }
+  }
+
+  dispose(scene: THREE.Scene): void {
+    scene.remove(this.group);
   }
 }

@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import {
-  GRENADE,
+  GRENADES,
   RENDER,
   WEAPONS,
   clamp,
   damp,
   lerp,
   rand,
+  type GrenadeKind,
+  type WeaponId,
   type WeaponSpec,
 } from '../game/constants';
 import type { InputIntents } from '../core/Input';
@@ -21,7 +23,7 @@ export interface WeaponEvents {
   onReloadStart: (spec: WeaponSpec) => void;
   onReloadEnd: (spec: WeaponSpec) => void;
   onSwitch: (spec: WeaponSpec) => void;
-  onGrenadeThrow: (origin: THREE.Vector3, dir: THREE.Vector3) => void;
+  onGrenadeThrow: (kind: GrenadeKind, origin: THREE.Vector3, dir: THREE.Vector3) => void;
 }
 
 interface WeaponRuntime {
@@ -34,14 +36,14 @@ interface WeaponRuntime {
 /** Viewmodel + firing logic + weapon feel (bob, sway, recoil, ADS). */
 export class WeaponSystem {
   readonly rig = new THREE.Group();
-  private weapons: Record<'rifle' | 'scattergun', WeaponRuntime>;
-  private currentId: 'rifle' | 'scattergun' = 'rifle';
+  private weapons: Record<WeaponId, WeaponRuntime>;
+  private currentId: WeaponId = 'rifle';
   private cooldown = 0;
   private reloadTimer = 0;
   private switchTimer = 0;
   reloading = false;
   private triggerWasDown = false;
-  grenadeCooldown = 0;
+  readonly grenadeCooldowns: Record<GrenadeKind, number> = { frag: 0, smoke: 0, flash: 0 };
   private recoil = 0;
   private swayX = 0;
   private swayY = 0;
@@ -77,6 +79,12 @@ export class WeaponSystem {
         reserve: WEAPONS.scattergun.reserve,
         model: WeaponSystem.buildFallbackScattergun(),
       },
+      sniper: {
+        spec: WEAPONS.sniper,
+        mag: WEAPONS.sniper.magSize,
+        reserve: WEAPONS.sniper.reserve,
+        model: WeaponSystem.buildFallbackSniper(),
+      },
     };
     for (const w of Object.values(this.weapons)) {
       w.model.visible = false;
@@ -97,12 +105,12 @@ export class WeaponSystem {
     return { mag: this.current.mag, reserve: this.current.reserve };
   }
 
-  addReserve(id: 'rifle' | 'scattergun', amount: number): void {
+  addReserve(id: WeaponId, amount: number): void {
     this.weapons[id].reserve += amount;
   }
 
   /** Replace a fallback viewmodel with an imported (Meshy) model. */
-  setImportedModel(id: 'rifle' | 'scattergun', group: THREE.Group): void {
+  setImportedModel(id: WeaponId, group: THREE.Group): void {
     const w = this.weapons[id];
     const wasVisible = w.model.visible;
     this.rig.remove(w.model);
@@ -111,7 +119,10 @@ export class WeaponSystem {
     this.rig.add(w.model);
   }
 
+  private rigWantedVisible = true;
+
   setRigVisible(visible: boolean): void {
+    this.rigWantedVisible = visible;
     this.rig.visible = visible;
   }
 
@@ -121,12 +132,14 @@ export class WeaponSystem {
       w.reserve = w.spec.reserve;
     }
     this.switchTo('rifle', true);
-    this.grenadeCooldown = 0;
+    this.grenadeCooldowns.frag = 0;
+    this.grenadeCooldowns.smoke = 0;
+    this.grenadeCooldowns.flash = 0;
     this.reloading = false;
     this.cooldown = 0;
   }
 
-  private switchTo(id: 'rifle' | 'scattergun', instant = false): void {
+  private switchTo(id: WeaponId, instant = false): void {
     if (this.currentId === id && !instant) return;
     this.weapons[this.currentId].model.visible = false;
     this.currentId = id;
@@ -149,11 +162,14 @@ export class WeaponSystem {
     const w = this.current;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.switchTimer = Math.max(0, this.switchTimer - dt);
-    this.grenadeCooldown = Math.max(0, this.grenadeCooldown - dt);
+    this.grenadeCooldowns.frag = Math.max(0, this.grenadeCooldowns.frag - dt);
+    this.grenadeCooldowns.smoke = Math.max(0, this.grenadeCooldowns.smoke - dt);
+    this.grenadeCooldowns.flash = Math.max(0, this.grenadeCooldowns.flash - dt);
 
     // weapon switching
     if (intents.weaponSlot === 1) this.switchTo('rifle');
     if (intents.weaponSlot === 2) this.switchTo('scattergun');
+    if (intents.weaponSlot === 3) this.switchTo('sniper');
 
     // reload
     if (this.reloading) {
@@ -201,16 +217,29 @@ export class WeaponSystem {
     }
     this.triggerWasDown = triggerDown;
 
-    // grenade
-    if (intents.grenade && this.grenadeCooldown <= 0 && firingAllowed) {
-      this.grenadeCooldown = GRENADE.cooldown;
+    // grenades
+    const tryThrow = (kind: GrenadeKind, wanted: boolean): void => {
+      if (!wanted || this.grenadeCooldowns[kind] > 0 || !firingAllowed) return;
+      this.grenadeCooldowns[kind] = GRENADES[kind].cooldown;
       const dir = eyeDir.clone();
       dir.y += 0.18;
       dir.normalize();
-      this.events.onGrenadeThrow(eyePos.clone().addScaledVector(eyeDir, 0.4), dir);
-    }
+      this.events.onGrenadeThrow(kind, eyePos.clone().addScaledVector(eyeDir, 0.4), dir);
+    };
+    tryThrow('frag', intents.grenade);
+    tryThrow('smoke', intents.smoke);
+    tryThrow('flash', intents.flash);
+
+    // telescopic scope: fade the viewmodel out at full ADS
+    const scoped = w.spec.scoped === true;
+    this.rig.visible = this.rigWantedVisible && !(scoped && this.adsBlend > 0.85);
 
     this.animateViewmodel(dt, lookDelta, moveBob);
+  }
+
+  /** 0..1 scope overlay amount for the HUD (only for scoped weapons). */
+  get scopeAmount(): number {
+    return this.current.spec.scoped ? this.adsBlend : 0;
   }
 
   private fire(eyeDir: THREE.Vector3, eyePos: THREE.Vector3): void {
@@ -346,6 +375,29 @@ export class WeaponSystem {
       v(m.metal, 0.03, 0.028, 0.03, 0, 0.048, -0.06), // rear sight
       v(m.accent, 0.052, 0.012, 0.012, 0, 0.028, -0.18), // amber charge strip
       v(m.wood, 0.054, 0.03, 0.14, 0, -0.028, -0.32), // handguard
+    );
+    for (const c of g.children) (c as THREE.Mesh).castShadow = false;
+    return g;
+  }
+
+  static buildFallbackSniper(): THREE.Group {
+    const g = new THREE.Group();
+    g.name = 'sniper_fallback';
+    const m = WeaponSystem.gunMats();
+    const v = WeaponSystem.vbox;
+    g.add(
+      v(m.dark, 0.05, 0.065, 0.3, 0, 0, -0.14), // receiver
+      v(m.metal, 0.028, 0.028, 0.44, 0, 0.012, -0.5), // long barrel
+      v(m.dark, 0.05, 0.05, 0.08, 0, 0.005, -0.74), // muzzle brake
+      v(m.wood, 0.05, 0.06, 0.2, 0, -0.012, 0.05), // stock body
+      v(m.wood, 0.05, 0.095, 0.11, 0, -0.05, 0.14), // butt
+      v(m.dark, 0.028, 0.09, 0.04, 0, -0.07, -0.08), // magazine
+      v(m.dark, 0.026, 0.055, 0.045, 0, -0.052, 0.03), // grip
+      v(m.metal, 0.035, 0.05, 0.16, 0, 0.065, -0.16), // scope body
+      v(m.dark, 0.045, 0.06, 0.02, 0, 0.065, -0.25), // scope objective
+      v(m.dark, 0.045, 0.06, 0.02, 0, 0.065, -0.07), // scope eyepiece
+      v(m.accent, 0.05, 0.012, 0.012, 0, 0.028, -0.3), // amber strip
+      v(m.metal, 0.014, 0.05, 0.014, 0, -0.02, -0.42), // bipod stub
     );
     for (const c of g.children) (c as THREE.Mesh).castShadow = false;
     return g;

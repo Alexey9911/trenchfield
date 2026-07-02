@@ -53,8 +53,10 @@ export const PLAYER = {
   sprintStepInterval: 0.31,
 } as const;
 
+export type WeaponId = 'rifle' | 'scattergun' | 'sniper';
+
 export interface WeaponSpec {
-  id: 'rifle' | 'scattergun';
+  id: WeaponId;
   name: string;
   auto: boolean;
   rpm: number;
@@ -70,9 +72,11 @@ export interface WeaponSpec {
   recoilKick: number;
   adsFov: number;
   tracerEvery: number;
+  /** true = telescopic sight: hide viewmodel + scope overlay at full ADS */
+  scoped?: boolean;
 }
 
-export const WEAPONS: Record<'rifle' | 'scattergun', WeaponSpec> = {
+export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   rifle: {
     id: 'rifle',
     name: 'M-27 TRENCH RIFLE',
@@ -109,15 +113,77 @@ export const WEAPONS: Record<'rifle' | 'scattergun', WeaponSpec> = {
     adsFov: 58,
     tracerEvery: 2,
   },
+  sniper: {
+    id: 'sniper',
+    name: 'W-14 LONGSHOT',
+    auto: false,
+    rpm: 38,
+    damage: 80,
+    headshotMul: 1.75,
+    pellets: 1,
+    spreadDeg: 6.5,
+    adsSpreadDeg: 0.04,
+    magSize: 5,
+    reserve: 20,
+    reloadTime: 3.1,
+    range: 150,
+    recoilKick: 0.055,
+    adsFov: 24,
+    tracerEvery: 1,
+    scoped: true,
+  },
 };
 
-export const GRENADE = {
-  cooldown: 7,
-  fuse: 2.2,
-  throwSpeed: 15,
-  radius: 5.2,
-  maxDamage: 118,
-  bounce: 0.38,
+export type GrenadeKind = 'frag' | 'smoke' | 'flash';
+
+export interface GrenadeSpec {
+  kind: GrenadeKind;
+  cooldown: number;
+  fuse: number;
+  throwSpeed: number;
+  radius: number;
+  maxDamage: number;
+  bounce: number;
+}
+
+export const GRENADES: Record<GrenadeKind, GrenadeSpec> = {
+  frag: {
+    kind: 'frag',
+    cooldown: 7,
+    fuse: 2.2,
+    throwSpeed: 15,
+    radius: 5.2,
+    maxDamage: 118,
+    bounce: 0.38,
+  },
+  smoke: {
+    kind: 'smoke',
+    cooldown: 14,
+    fuse: 1.5,
+    throwSpeed: 13,
+    radius: 4.6, // cloud radius; blocks bot line of sight
+    maxDamage: 0,
+    bounce: 0.3,
+  },
+  flash: {
+    kind: 'flash',
+    cooldown: 11,
+    fuse: 1.4,
+    throwSpeed: 16,
+    radius: 16, // blind radius with LOS + facing check
+    maxDamage: 0,
+    bounce: 0.42,
+  },
+};
+
+export const SMOKE_CLOUD = {
+  duration: 9,
+  botBlindRadiusMul: 1.0,
+} as const;
+
+export const FLASH = {
+  playerMaxDuration: 2.4,
+  botBlindDuration: 2.6,
 } as const;
 
 export const BOTS = {
@@ -146,6 +212,118 @@ export const RENDER = {
   exposure: 1.14,
   shadowMapSize: 2048,
 } as const;
+
+export type MapId = 'day' | 'night';
+
+export interface MapTheme {
+  id: MapId;
+  label: string;
+  tagline: string;
+  seed: number;
+  variant: 0 | 1;
+  /** sky dome gradient */
+  zenith: number;
+  mid: number;
+  horizon: number;
+  hazeColor: [number, number, number];
+  /** sun (day) or moon (night) */
+  discColor: number;
+  discCorePow: number;
+  discCoreStrength: number;
+  discHaloPow: number;
+  discHaloStrength: number;
+  sunDirY: number;
+  /** lights */
+  keyColor: number;
+  keyIntensity: number;
+  hemiSky: number;
+  hemiGround: number;
+  hemiIntensity: number;
+  rimColor: number;
+  rimIntensity: number;
+  /** atmosphere */
+  fogColor: number;
+  fogNear: number;
+  fogFar: number;
+  exposure: number;
+  stars: boolean;
+  cloudColorA: number;
+  cloudColorB: number;
+  cloudOpacity: number;
+  hillColor: number;
+  dustColor: number;
+}
+
+export const MAPS: Record<MapId, MapTheme> = {
+  day: {
+    id: 'day',
+    label: 'DAYBREAK SALIENT',
+    tagline: 'clear morning · open sightlines',
+    seed: 1917,
+    variant: 0,
+    zenith: 0x3f7ec2,
+    mid: 0x8ab4dc,
+    horizon: 0xe8dcb8,
+    hazeColor: [0.78, 0.74, 0.62],
+    discColor: 0xfff4d6,
+    discCorePow: 340,
+    discCoreStrength: 2.0,
+    discHaloPow: 32,
+    discHaloStrength: 0.4,
+    sunDirY: 0.72,
+    keyColor: 0xfff1da,
+    keyIntensity: 3.1,
+    hemiSky: 0x9fbede,
+    hemiGround: 0x8a7454,
+    hemiIntensity: 1.7,
+    rimColor: 0xcfe0f5,
+    rimIntensity: 0.4,
+    fogColor: 0xc4c3ae,
+    fogNear: 42,
+    fogFar: 170,
+    exposure: 1.06,
+    stars: false,
+    cloudColorA: 0xffffff,
+    cloudColorB: 0xf2ece0,
+    cloudOpacity: 0.75,
+    hillColor: 0x5d7256,
+    dustColor: 0xd8cfae,
+  },
+  night: {
+    id: 'night',
+    label: 'MIDNIGHT SECTOR',
+    tagline: 'blue moonlight · close-quarters fights',
+    seed: 2044,
+    variant: 1,
+    zenith: 0x0a1228,
+    mid: 0x1d2c52,
+    horizon: 0x33497a,
+    hazeColor: [0.14, 0.2, 0.36],
+    discColor: 0xdce8ff,
+    discCorePow: 420,
+    discCoreStrength: 1.9,
+    discHaloPow: 40,
+    discHaloStrength: 0.5,
+    sunDirY: 0.55,
+    keyColor: 0x8fb2f2,
+    keyIntensity: 2.6,
+    hemiSky: 0x4a5f9e,
+    hemiGround: 0x39415c,
+    hemiIntensity: 1.75,
+    rimColor: 0x7e9ae0,
+    rimIntensity: 0.8,
+    fogColor: 0x243252,
+    fogNear: 30,
+    fogFar: 140,
+    exposure: 1.22,
+    stars: true,
+    cloudColorA: 0x4a5a80,
+    cloudColorB: 0x39466a,
+    cloudOpacity: 0.45,
+    hillColor: 0x141c30,
+    dustColor: 0x8a9ac0,
+  },
+};
 
 export const BOT_NAMES = [
   'Sgt. Voxel',

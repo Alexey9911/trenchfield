@@ -1,21 +1,24 @@
 # TrenchField
 
-A browser-playable voxel arena shooter prototype. Five-minute deathmatch against six AI
-soldiers in a dusk-lit WW1-style trench arena. Earn **Trench Points** for kills, streaks
-and headshots — banked to a local wallet, with a mocked Solana creator-room economy
-(room owner earns a 5% cut of all TP generated in the room).
-
-**Single-player vs bots.** Multiplayer and on-chain settlement are on the roadmap; this
-prototype prioritises the visual identity, the gameplay feel and instant browser access.
+A browser-playable voxel arena shooter. Compact 5-minute deathmatch in a WW1-style
+voxel trench arena — **solo vs bots** or **realtime multiplayer with SOL wagers**. Pick a
+day or night map, drop in, and fight. Earn Trench Points solo, or stake real SOL in wager
+lobbies where every kill takes a slice of your victim's pot.
 
 ## Run
 
 ```bash
+# client
 npm install
 npm run dev        # http://127.0.0.1:5188
-npm run build      # production build (dist/)
-npm run preview    # serve production build at http://127.0.0.1:4188
-npm test           # Playwright QA suite (landing + gameplay, desktop + mobile)
+npm run build      # static production build (dist/)
+npm run preview    # serve the build at http://127.0.0.1:4188
+npm test           # Playwright QA suite
+
+# realtime server (multiplayer + wagers + chat)
+cd server
+npm install
+node index.js      # :8123  (needs server/.env — see below)
 ```
 
 ## Controls
@@ -23,44 +26,66 @@ npm test           # Playwright QA suite (landing + gameplay, desktop + mobile)
 | Input | Action |
 | --- | --- |
 | `W A S D` | Move |
-| Mouse | Aim · left click fire · right click iron sights |
-| `Shift` | Sprint |
-| `Space` / `C` | Jump / crouch |
+| Mouse | Aim · left click fire · right click sights (sniper = scope) |
+| `Shift` | Sprint · `Space` jump · `C` crouch |
 | `R` | Reload |
-| `G` | Frag grenade (carves real craters in soft terrain) |
-| `1` / `2` | M-27 Trench Rifle / S-12 Scattergun |
-| `Tab` | Scoreboard |
-| `Esc` | Pause |
+| `1 / 2 / 3` | Rifle / Scattergun / Sniper |
+| `G / F / X` | Frag / Smoke / Flash grenade |
+| `Tab` | Scoreboard · `Esc` pause |
+
+## Modes
+
+- **Solo (default)** — 6 AI soldiers in free-for-all, Trench Points banked locally.
+- **Multiplayer lobbies** — create or join a lobby (2–8 players, day or night map).
+  - *Friendly*: no stakes.
+  - *Wager*: stake SOL once to join. Each kill transfers 10% of the stake from victim
+    to killer; cash out your pot when the match ends. Server-authoritative, on-chain
+    escrow via a dedicated hot wallet.
 
 ## What's inside
 
-- **Voxel world**: 72×72 chunked arena, procedural pixel-art texture atlas, per-vertex
-  ambient occlusion, zigzag trench lines with duckboards and sandbag parapets, four
-  bunkers, two watchtowers, crater field, barbed wire, destructible soft terrain.
-- **Bots**: three archetypes (Rifleman / Shocktrooper / Scout) with distinct voxel
-  bodies, helmets, colors, stats and AI (patrol, line-of-sight target acquisition,
-  strafing burst fire, auto-jump navigation, free-for-all — they fight each other too).
-- **Hero assets**: rifle + scattergun viewmodels and the crashed tank centerpiece were
-  generated with the Meshy API, then remeshed and compressed (meshopt + WebP) from
-  66 MB raw to **1.9 MB total**.
-- **Audio**: 24 sounds generated with ElevenLabs (weapons, hits, footsteps, pickups,
-  explosion, UI, looping battlefield ambience, announcer voice lines), played through a
-  grouped Web Audio manager with distance attenuation.
-- **Economy mock**: Trench Points per kill/streak/headshot, persistent local wallet,
-  creator-room card with owner cut — clearly labelled as a devnet-style mock.
+- **Voxel world**: 72×72 chunked arena, procedural pixel-art atlas (mipmapped), baked
+  per-vertex AO, zigzag trenches, bunkers, watchtowers, crater field, destructible soft
+  terrain. Two themed maps — **Daybreak** (bright) and **Midnight** (blue moonlight).
+- **Weapons**: M-27 rifle, S-12 scattergun, W-14 bolt sniper (scoped) — Meshy-generated
+  viewmodels. Frag (craters), smoke (blocks bot LOS), flash (blinds player + bots).
+- **Bots**: 3 archetypes with distinct voxel bodies + AI (LOS acquisition, strafing
+  bursts, auto-jump, free-for-all).
+- **3D assets**: rifle / shotgun / sniper / tank from Meshy, remeshed + meshopt/WebP
+  compressed (66 MB raw → ~2.3 MB shipped).
+- **Audio**: Kenney CC0 arcade weapon sounds + ElevenLabs SFX/ambience/announcer, grouped
+  Web Audio with distance attenuation.
+- **Realtime backend** (`server/`): socket.io relay @ 20 Hz, server-validated combat
+  (fire-rate, range, speed, aimbot heuristics), lobbies with reconnect grace, Solana
+  escrow (deposit verification + payouts), Neon Postgres (players/matches/bets/chat),
+  global + lobby chat with 3-tier moderation (rate-limit → heuristics → Cerebras LLM),
+  kills + SOL-won leaderboards.
 
-## Verification hooks
+## Server env (`server/.env`)
 
-- `?test=1` — auto-deploys without pointer lock and exposes deterministic QA hooks
-  (`__TEST_AIM_AT_BOT__`, `__TEST_TELEPORT_TO_BOT__`, `__TEST_SET_TIME__`).
-- `window.__THREE_GAME_DIAGNOSTICS__` — frame, state, renderer counts, player, bots,
-  audio and imported-asset diagnostics.
-- `node scripts/capture.mjs` — desktop/mobile screenshot evidence.
-- `node scripts/playtest.mjs` — automated combat playtest.
-- `node scripts/inspect-threejs-canvas.mjs --url …` — canvas pixel verification.
+```
+DATABASE_URL=postgresql://…neon.tech/neondb?sslmode=require
+HELIUS_API_KEY=…                 # Solana RPC
+HOUSE_WALLET_SECRET=…            # base58 secret of the escrow hot wallet
+SOLANA_CLUSTER=mainnet-beta
+CEREBRAS_API_KEYS=csk-…,csk-…    # optional; LLM chat moderation (heuristics work without)
+PORT=8123
+```
+
+The client points at the server via `VITE_SOCKET_URL` (falls back to `localhost:8123` in
+dev). Without a reachable server the client runs solo-only and hides the lobby UI.
 
 ## Deploy
 
-`npm run build` produces a fully static `dist/` (6.4 MB, ~190 KB gzipped JS before
-lazy-loaded models/audio) that works on any static host (Netlify, Vercel, Cloudflare
-Pages). No server required.
+- **Client**: static `dist/` on Vercel (`git push` auto-deploys). Set `VITE_SOCKET_URL`.
+- **Server**: single always-on Fly.io machine (`fly deploy`). Escrow + lobbies live in
+  RAM — never scale count > 1. Neon (US-East) is region-matched to Fly `iad`.
+
+## Verification hooks
+
+- `?test=1` — auto-deploys solo, exposes QA hooks (`__TEST_AIM_AT_BOT__`,
+  `__TEST_TELEPORT_TO_BOT__`, `__TEST_GOD__`, `__TEST_SET_TIME__`). Add `&mp=1` for the
+  multiplayer flow (`__TEST_AIM_AT_REMOTE__`).
+- `window.__THREE_GAME_DIAGNOSTICS__` — frame, state, renderer counts, player, bots.
+- `node scripts/capture.mjs` — screenshot evidence · `node scripts/mptest.mjs` — 2-client
+  multiplayer E2E · `node scripts/playtest.mjs` — solo combat playtest.

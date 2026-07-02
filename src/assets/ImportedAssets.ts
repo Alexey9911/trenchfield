@@ -73,12 +73,14 @@ export async function loadWeaponModel(
   // Meshy side-profile weapons usually extend along X. Rotate longest axis to Z.
   let length = size.z;
   if (size.x >= size.y && size.x >= size.z) {
-    inner.rotation.y = Math.PI / 2; // X -> -Z (barrel left-facing profile)
+    inner.rotation.y = Math.PI / 2;
     length = size.x;
   } else if (size.y >= size.x && size.y >= size.z) {
     inner.rotation.x = Math.PI / 2;
     length = size.y;
   }
+  // Meshy profiles come out muzzle-toward-camera: flip so the barrel points -Z (downrange)
+  inner.rotation.y += Math.PI;
 
   const s = targetLength / Math.max(length, 0.001);
   wrapper.scale.setScalar(s);

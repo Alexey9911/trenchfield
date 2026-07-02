@@ -12,3 +12,9 @@ meshy_output/
 
 # keep screenshot evidence out of the repo
 artifacts/
+
+.vercel
+
+# server secrets
+server/.env*
+server/node_modules/

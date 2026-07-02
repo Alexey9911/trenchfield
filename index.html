@@ -73,11 +73,19 @@
             <span id="ammo-reserve">150</span>
           </div>
           <div class="ammo-sub">
-            <div id="grenade-pip" title="Grenade [G]"><span class="pip-icon">G</span></div>
-            <span class="slot-hints">[1] RIFLE&nbsp;&nbsp;[2] SCATTERGUN</span>
+            <div id="pip-frag" class="nade-pip" title="Frag [G]"><span class="pip-icon">G</span></div>
+            <div id="pip-smoke" class="nade-pip smoke" title="Smoke [F]"><span class="pip-icon">F</span></div>
+            <div id="pip-flash" class="nade-pip flashpip" title="Flash [X]"><span class="pip-icon">X</span></div>
+            <span class="slot-hints">[1] RIFLE&nbsp;[2] SCATTER&nbsp;[3] SNIPER</span>
           </div>
         </div>
 
+        <div id="scope-overlay" aria-hidden="true">
+          <div class="scope-ring"></div>
+          <div class="scope-cross-h"></div>
+          <div class="scope-cross-v"></div>
+        </div>
+        <div id="flash-overlay" aria-hidden="true"></div>
         <div id="reload-hint">RELOADING…</div>
         <div id="score-pop"></div>
         <div id="streak-banner"></div>
@@ -107,9 +115,25 @@
             <p class="hero-eyebrow">BROWSER VOXEL SHOOTER · NO INSTALL · INSTANT ACTION</p>
             <h1 class="hero-title">TRENCH<span>FIELD</span></h1>
             <p class="hero-tag">
-              Five minutes. One dusk-lit trench arena. Seven guns barking across no-man's-land.
+              Five minutes. One compact trench arena — bright morning or blue midnight.
               Drop in, take the top slot, walk out with Trench Points.
             </p>
+            <div class="map-select" role="radiogroup" aria-label="Select map">
+              <button id="map-card-day" class="map-card selected" type="button">
+                <span class="map-swatch day"></span>
+                <span class="map-info">
+                  <span class="map-name">DAYBREAK SALIENT</span>
+                  <span class="map-tag">clear morning · open sightlines</span>
+                </span>
+              </button>
+              <button id="map-card-night" class="map-card" type="button">
+                <span class="map-swatch night"></span>
+                <span class="map-info">
+                  <span class="map-name">MIDNIGHT SECTOR</span>
+                  <span class="map-tag">blue moonlight · close quarters</span>
+                </span>
+              </button>
+            </div>
             <button id="btn-deploy" class="btn-primary" type="button">
               <span class="btn-flash"></span>DEPLOY
             </button>
@@ -126,8 +150,8 @@
           <aside class="landing-cards">
             <div class="card card-points">
               <div class="card-head">
-                <span class="card-title">TRENCH POINTS</span>
-                <span class="chip-devnet">SOLANA · DEVNET PREVIEW</span>
+                <span class="card-title">WALLET & POINTS</span>
+                <span class="chip-devnet">SOLANA MAINNET</span>
               </div>
               <div class="points-balance">
                 <span class="tp-diamond big"></span>
@@ -135,28 +159,38 @@
                 <span class="points-unit">TP</span>
               </div>
               <p class="card-note">
-                Earned per kill, streak and headshot. Banked to your local wallet after every
-                match — on-chain settlement is mocked in this prototype.
+                Trench Points from solo runs stay local. In wager lobbies you stake real SOL —
+                every kill takes a slice from your victim's pot, every death gives one up.
               </p>
               <div class="wallet-row">
-                <button id="wallet-connect" class="btn-ghost" type="button">CONNECT WALLET</button>
-                <span id="wallet-address" class="wallet-address">Not connected</span>
+                <button id="mp-connect-btn" class="btn-ghost" type="button">CONNECT WALLET</button>
+                <span id="mp-wallet-status" class="wallet-address">Not connected</span>
               </div>
             </div>
 
-            <div class="card card-room">
+            <div class="card card-lobbies">
               <div class="card-head">
-                <span class="card-title">CREATOR ROOM</span>
-                <span class="room-cut">5% CUT</span>
+                <span class="card-title">FRONTLINE LOBBIES</span>
+                <span class="mp-status"><span id="mp-status-dot" class="live-dot offline"></span><span id="mp-status-label">CONNECTING…</span></span>
               </div>
-              <div class="room-owner">
-                <span class="owner-avatar">TL</span>
-                <div>
-                  <div class="owner-name">TrenchLord.sol</div>
-                  <div class="owner-sub">room owner · earns 5% of all TP generated here</div>
-                </div>
+              <div class="mp-meta-row"><span id="mp-online">0</span> operators online</div>
+              <div id="lobby-list" class="lobby-list">
+                <p class="lobby-empty">Connecting to the frontline…</p>
               </div>
-              <ul id="room-feed" class="room-feed"></ul>
+              <button id="btn-create-lobby" class="btn-ghost create-lobby-btn" type="button">✚ CREATE LOBBY</button>
+            </div>
+
+            <div class="card card-leaderboard">
+              <div class="card-head">
+                <span class="card-title">LEADERBOARD</span>
+                <span class="lb-tabs">
+                  <button class="lb-tab active" data-mode="kills" type="button">KILLS</button>
+                  <button class="lb-tab" data-mode="sol" type="button">◎ SOL WON</button>
+                </span>
+              </div>
+              <table class="lb-table">
+                <tbody id="leaderboard-body"><tr><td class="lobby-empty">Loading…</td></tr></tbody>
+              </table>
             </div>
           </aside>
         </div>
@@ -186,7 +220,7 @@
             </label>
           </div>
           <div class="pause-controls">
-            <p><kbd>W A S D</kbd> move · <kbd>SPACE</kbd> jump · <kbd>C</kbd> crouch · <kbd>R</kbd> reload · <kbd>G</kbd> grenade · <kbd>1/2</kbd> weapons</p>
+            <p><kbd>W A S D</kbd> move · <kbd>SPACE</kbd> jump · <kbd>C</kbd> crouch · <kbd>R</kbd> reload · <kbd>G</kbd> frag · <kbd>F</kbd> smoke · <kbd>X</kbd> flash · <kbd>1/2/3</kbd> weapons</p>
           </div>
           <button id="btn-quit" class="btn-ghost" type="button">ABANDON MATCH</button>
         </div>
@@ -224,6 +258,90 @@
           </div>
         </div>
       </section>
+      <!-- ============ LOBBY ROOM ============ -->
+      <section id="screen-lobby" class="screen">
+        <div class="panel wide lobby-panel">
+          <div class="lr-head">
+            <h2 class="panel-title" id="lobby-room-title">TRENCH LOBBY</h2>
+            <span class="lr-code">CODE <strong id="lobby-room-code">----</strong></span>
+          </div>
+          <div id="lobby-room-info" class="lr-info"></div>
+          <div id="lobby-room-players" class="lr-players"></div>
+          <div id="lobby-countdown" class="lr-countdown"></div>
+          <div class="end-actions">
+            <button id="lobby-ready" class="btn-primary compact" type="button">READY UP</button>
+            <button id="lobby-unstake" class="btn-ghost hidden" type="button">WITHDRAW STAKE</button>
+            <button id="lobby-leave" class="btn-ghost" type="button">LEAVE</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ CREATE LOBBY MODAL ============ -->
+      <section id="create-modal" class="screen modal">
+        <div class="panel create-panel">
+          <h2 class="panel-title">CREATE LOBBY</h2>
+          <label class="form-row">
+            <span>NAME</span>
+            <input id="create-title" type="text" maxlength="24" placeholder="my trench" />
+          </label>
+          <div class="form-row">
+            <span>MAP</span>
+            <span class="radio-row">
+              <label><input type="radio" name="create-map" value="day" checked /> DAYBREAK</label>
+              <label><input type="radio" name="create-map" value="night" /> MIDNIGHT</label>
+            </span>
+          </div>
+          <label class="form-row">
+            <span>PLAYERS</span>
+            <select id="create-max">
+              <option value="2">2 — duel</option>
+              <option value="4" selected>4</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <div class="form-row">
+            <span>MODE</span>
+            <span class="radio-row">
+              <label><input type="radio" name="create-mode" value="free" checked /> FRIENDLY</label>
+              <label id="create-wager-label"><input type="radio" name="create-mode" value="wager" /> ◎ SOL WAGER</label>
+            </span>
+          </div>
+          <label class="form-row hidden" id="create-stake-row">
+            <span>STAKE</span>
+            <select id="create-stake"></select>
+          </label>
+          <p class="card-note">Wager rules: stake once to join · each kill takes 10% of the stake from your victim · cash out your pot when the match ends.</p>
+          <div class="end-actions">
+            <button id="create-confirm" class="btn-primary compact" type="button">CREATE</button>
+            <button id="create-cancel" class="btn-ghost" type="button">CANCEL</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ WALLET MODAL ============ -->
+      <section id="wallet-modal" class="screen modal">
+        <div class="panel create-panel">
+          <h2 class="panel-title">CONNECT WALLET</h2>
+          <div id="wallet-options" class="wallet-options"></div>
+          <button id="wallet-modal-close" class="btn-ghost" type="button">CLOSE</button>
+        </div>
+      </section>
+
+      <!-- ============ GLOBAL / LOBBY CHAT DOCK ============ -->
+      <div id="chat-dock" class="collapsed">
+        <div class="chat-head">
+          <span class="chat-tabs">
+            <button class="chat-tab active" data-scope="global" type="button">GLOBAL</button>
+            <button class="chat-tab" data-scope="lobby" type="button">LOBBY</button>
+          </span>
+          <button id="chat-toggle" type="button" aria-label="Toggle chat">▾</button>
+        </div>
+        <div id="chat-messages"></div>
+        <input id="chat-input" type="text" maxlength="200" placeholder="say something…" />
+      </div>
+
+      <div id="mp-toast" aria-live="polite"></div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

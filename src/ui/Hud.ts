@@ -14,7 +14,11 @@ export class Hud {
   private ammoMag = el<HTMLSpanElement>('ammo-mag');
   private ammoReserve = el<HTMLSpanElement>('ammo-reserve');
   private weaponName = el<HTMLSpanElement>('weapon-name');
-  private grenadePip = el<HTMLDivElement>('grenade-pip');
+  private pipFrag = el<HTMLDivElement>('pip-frag');
+  private pipSmoke = el<HTMLDivElement>('pip-smoke');
+  private pipFlash = el<HTMLDivElement>('pip-flash');
+  private scopeOverlay = el<HTMLDivElement>('scope-overlay');
+  private flashOverlay = el<HTMLDivElement>('flash-overlay');
   private timer = el<HTMLDivElement>('match-timer');
   private points = el<HTMLSpanElement>('tp-value');
   private sessionPoints = el<HTMLSpanElement>('tp-session');
@@ -59,13 +63,37 @@ export class Hud {
     this.damageVignette.style.setProperty('--dmg', String(Math.pow(1 - pct, 1.6) * 0.55));
   }
 
-  setAmmo(mag: number, reserve: number, weapon: string, grenadeReady: number): void {
+  setAmmo(
+    mag: number,
+    reserve: number,
+    weapon: string,
+    pips: { frag: number; smoke: number; flash: number },
+  ): void {
     this.ammoMag.textContent = String(mag);
     this.ammoReserve.textContent = String(reserve);
     this.weaponName.textContent = weapon;
     this.ammoMag.classList.toggle('empty', mag === 0);
-    this.grenadePip.style.setProperty('--ready', String(grenadeReady));
-    this.grenadePip.classList.toggle('ready', grenadeReady >= 1);
+    const apply = (node: HTMLDivElement, ready: number): void => {
+      node.style.setProperty('--ready', String(ready));
+      node.classList.toggle('ready', ready >= 1);
+    };
+    apply(this.pipFrag, pips.frag);
+    apply(this.pipSmoke, pips.smoke);
+    apply(this.pipFlash, pips.flash);
+  }
+
+  setScope(amount: number): void {
+    const active = amount > 0.55;
+    this.scopeOverlay.classList.toggle('show', active);
+    this.crosshair.classList.toggle('hidden-by-scope', active);
+  }
+
+  flashBang(intensity: number, duration: number): void {
+    this.flashOverlay.style.transition = 'none';
+    this.flashOverlay.style.opacity = String(Math.min(intensity * 1.35, 1));
+    void this.flashOverlay.offsetWidth;
+    this.flashOverlay.style.transition = `opacity ${duration.toFixed(2)}s ease-out`;
+    this.flashOverlay.style.opacity = '0';
   }
 
   setReloading(active: boolean): void {

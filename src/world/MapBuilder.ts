@@ -28,8 +28,8 @@ function makeRng(seed: number): () => number {
   };
 }
 
-export function buildTrenchArena(world: VoxelWorld): MapLayout {
-  const rng = makeRng(1917);
+export function buildTrenchArena(world: VoxelWorld, seed = 1917, variant: 0 | 1 = 0): MapLayout {
+  const rng = makeRng(seed);
   const G = WORLD.groundLevel;
   const SX = world.sx;
   const SZ = world.sz;
@@ -112,17 +112,23 @@ export function buildTrenchArena(world: VoxelWorld): MapLayout {
     return floorPts;
   };
 
-  // two opposing zigzag trench lines
-  const northTrench = digTrench([
-    [8, 22], [18, 26], [28, 21], [40, 25], [52, 20], [64, 24],
-  ]);
-  const southTrench = digTrench([
-    [8, 50], [20, 46], [32, 52], [44, 47], [56, 51], [64, 48],
-  ]);
-  // one communication trench connecting the lines on the west side
-  const commTrench = digTrench([
-    [14, 26], [12, 34], [16, 42], [14, 48],
-  ]);
+  // two opposing zigzag trench lines (layout varies per map)
+  const northTrench = digTrench(
+    variant === 0
+      ? [[8, 22], [18, 26], [28, 21], [40, 25], [52, 20], [64, 24]]
+      : [[8, 18], [20, 23], [34, 18], [44, 24], [58, 19], [64, 26]],
+  );
+  const southTrench = digTrench(
+    variant === 0
+      ? [[8, 50], [20, 46], [32, 52], [44, 47], [56, 51], [64, 48]]
+      : [[8, 54], [18, 49], [30, 54], [46, 50], [54, 55], [64, 50]],
+  );
+  // communication trench connecting the lines (west on day, east on night)
+  const commTrench = digTrench(
+    variant === 0
+      ? [[14, 26], [12, 34], [16, 42], [14, 48]]
+      : [[58, 26], [60, 34], [56, 44], [58, 50]],
+  );
 
   // --- central crater field + tank wreck -----------------------------------
   const craterAt = (cx: number, cz: number, r: number, depth: number): void => {

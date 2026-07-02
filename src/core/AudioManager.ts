@@ -5,6 +5,7 @@ export type AudioGroup = 'sfx' | 'ui' | 'ambience' | 'voice';
 const MANIFEST: Record<string, { url: string; group: AudioGroup }> = {
   rifleShot: { url: '/assets/audio/sfx/rifle-shot.mp3', group: 'sfx' },
   scattergunShot: { url: '/assets/audio/sfx/scattergun-shot.mp3', group: 'sfx' },
+  sniperShot: { url: '/assets/audio/sfx/sniper-shot.mp3', group: 'sfx' },
   reload: { url: '/assets/audio/sfx/reload.mp3', group: 'sfx' },
   dryFire: { url: '/assets/audio/sfx/dry-fire.mp3', group: 'sfx' },
   hitmarker: { url: '/assets/audio/sfx/hitmarker.mp3', group: 'sfx' },

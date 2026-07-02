@@ -1,5 +1,5 @@
 import { Match, type RosterEntry } from '../game/Match';
-import { MATCH } from '../game/constants';
+import { MATCH, type MapId } from '../game/constants';
 
 export type ScreenName = 'landing' | 'pause' | 'death' | 'end' | null;
 
@@ -11,6 +11,7 @@ export interface ScreenCallbacks {
   onSensitivity: (v: number) => void;
   onVolume: (v: number) => void;
   onMute: (muted: boolean) => void;
+  onMapSelect: (id: MapId) => void;
   onUiClick: () => void;
 }
 
@@ -29,8 +30,6 @@ export class Screens {
     end: el('screen-end'),
   };
   private walletValue = el<HTMLSpanElement>('wallet-value');
-  private walletConnectBtn = el<HTMLButtonElement>('wallet-connect');
-  private walletAddress = el<HTMLSpanElement>('wallet-address');
   private deathKiller = el<HTMLSpanElement>('death-killer');
   private deathCountdown = el<HTMLSpanElement>('death-countdown');
   private endPlacement = el<HTMLDivElement>('end-placement');
@@ -38,8 +37,6 @@ export class Screens {
   private endTp = el<HTMLSpanElement>('end-tp');
   private endCreatorCut = el<HTMLSpanElement>('end-creator-cut');
   private endKd = el<HTMLSpanElement>('end-kd');
-  private feedList = el<HTMLUListElement>('room-feed');
-  private walletConnected = false;
   current: ScreenName = 'landing';
 
   constructor(cb: ScreenCallbacks) {
@@ -75,46 +72,25 @@ export class Screens {
     const mute = el<HTMLInputElement>('setting-mute');
     mute.addEventListener('change', () => cb.onMute(mute.checked));
 
-    this.walletConnectBtn.addEventListener('click', () => {
-      cb.onUiClick();
-      this.toggleWallet();
-    });
+    for (const id of ['day', 'night'] as MapId[]) {
+      el<HTMLButtonElement>(`map-card-${id}`).addEventListener('click', () => {
+        cb.onUiClick();
+        this.setSelectedMap(id);
+        cb.onMapSelect(id);
+      });
+    }
 
     this.refreshWallet();
-    this.populateRoomFeed();
-  }
-
-  private toggleWallet(): void {
-    this.walletConnected = !this.walletConnected;
-    if (this.walletConnected) {
-      const addr = 'trnch' + Math.random().toString(36).slice(2, 6).toUpperCase();
-      this.walletAddress.textContent = `${addr}…4Fld (devnet)`;
-      this.walletConnectBtn.textContent = 'DISCONNECT';
-      this.walletConnectBtn.classList.add('connected');
-    } else {
-      this.walletAddress.textContent = 'Not connected';
-      this.walletConnectBtn.textContent = 'CONNECT WALLET';
-      this.walletConnectBtn.classList.remove('connected');
-    }
   }
 
   refreshWallet(): void {
     this.walletValue.textContent = Match.walletBalance().toLocaleString('en-US');
   }
 
-  private populateRoomFeed(): void {
-    const entries = [
-      { who: 'Mudcrawler', what: 'earned 350 TP', when: '2m ago' },
-      { who: 'Sgt. Voxel', what: 'hit a 5-kill streak', when: '4m ago' },
-      { who: 'Wire-Cutter', what: 'joined the room', when: '7m ago' },
-      { who: 'Old Shrapnel', what: 'earned 225 TP', when: '11m ago' },
-    ];
-    this.feedList.innerHTML = entries
-      .map(
-        (e) =>
-          `<li><span class="feed-who">${e.who}</span> ${e.what}<span class="feed-when">${e.when}</span></li>`,
-      )
-      .join('');
+  setSelectedMap(id: MapId): void {
+    for (const m of ['day', 'night'] as MapId[]) {
+      el(`map-card-${m}`).classList.toggle('selected', m === id);
+    }
   }
 
   show(name: ScreenName): void {

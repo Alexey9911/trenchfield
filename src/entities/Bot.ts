@@ -53,6 +53,7 @@ export class Bot {
   private strafeTimer = 0;
   private onGround = false;
   private lookPitch = 0;
+  private blindTimer = 0;
 
   constructor(id: string, name: string, archetype: BotArchetype, scene: THREE.Scene) {
     this.id = id;
@@ -108,6 +109,17 @@ export class Bot {
     this.yaw = rand(0, Math.PI * 2);
   }
 
+  /** Flashbang hit: can't aim or fire while blind. */
+  blind(duration: number): void {
+    if (!this.alive) return;
+    this.blindTimer = Math.max(this.blindTimer, duration);
+    this.hitFlash = 1;
+  }
+
+  get isBlind(): boolean {
+    return this.blindTimer > 0;
+  }
+
   /** @returns true when this damage killed the bot */
   takeDamage(amount: number, isHead: boolean): boolean {
     if (!this.alive) return false;
@@ -136,6 +148,7 @@ export class Bot {
     }
 
     this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
+    this.blindTimer = Math.max(0, this.blindTimer - dt);
     this.think(dt, ctx);
     this.move(dt, ctx.world);
     this.animate(dt);
@@ -228,6 +241,13 @@ export class Bot {
       wish.normalize();
       this.velocity.x = lerp(this.velocity.x, wish.x * this.archetype.speed, 6 * dt);
       this.velocity.z = lerp(this.velocity.z, wish.z * this.archetype.speed, 6 * dt);
+    }
+
+    // blinded: stumble sideways, no shooting
+    if (this.blindTimer > 0) {
+      this.velocity.x = lerp(this.velocity.x, this.strafeDir * this.archetype.speed * 0.7, 4 * dt);
+      this.velocity.z = lerp(this.velocity.z, -this.strafeDir * this.archetype.speed * 0.4, 4 * dt);
+      return;
     }
 
     // fire control

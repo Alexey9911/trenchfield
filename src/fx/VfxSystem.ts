@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { rand } from '../game/constants';
+import { clamp, rand } from '../game/constants';
 
 interface Tracer {
   mesh: THREE.Mesh;
@@ -51,6 +51,11 @@ export class VfxSystem {
   private dust: THREE.Points;
   private dustVel: Float32Array;
   private smokeEmitters: Array<{ pos: THREE.Vector3; timer: number }> = [];
+  /** tactical smoke clouds: dense emitters with a lifetime, used for LOS blocking */
+  readonly smokeClouds: Array<{ pos: THREE.Vector3; radius: number; ttl: number; timer: number }> =
+    [];
+  private muzzleCone: THREE.Mesh;
+  private muzzleConeLife = 0;
   private flashTex: THREE.Texture;
   private puffTex: THREE.Texture;
   private tmpM = new THREE.Matrix4();
@@ -142,6 +147,22 @@ export class VfxSystem {
     this.explosionLight = new THREE.PointLight(0xff9a3d, 0, 22, 2);
     this.group.add(this.muzzleLight, this.explosionLight);
 
+    // short-lived muzzle fire cone
+    this.muzzleCone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.055, 0.3, 7, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xffcf7d,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    this.muzzleCone.visible = false;
+    this.group.add(this.muzzleCone);
+
     // ambient drifting dust/ash
     const dustCount = 240;
     const dustPos = new Float32Array(dustCount * 3);
@@ -193,18 +214,104 @@ export class VfxSystem {
     this.smokeEmitters.push({ pos: pos.clone(), timer: rand(0, 0.5) });
   }
 
-  muzzleFlash(pos: THREE.Vector3, big = false): void {
+  clearSmokeColumns(): void {
+    this.smokeEmitters.length = 0;
+    this.smokeClouds.length = 0;
+  }
+
+  setDustColor(color: number): void {
+    (this.dust.material as THREE.PointsMaterial).color.setHex(color);
+  }
+
+  muzzleFlash(pos: THREE.Vector3, big = false, dir?: THREE.Vector3): void {
     const f = this.flashes.find((x) => x.life <= 0);
     if (f) {
       f.life = 0.055;
       f.sprite.visible = true;
       f.sprite.position.copy(pos);
-      f.sprite.scale.setScalar(big ? rand(0.7, 0.95) : rand(0.32, 0.48));
+      f.sprite.scale.setScalar(big ? rand(0.7, 0.95) : rand(0.35, 0.52));
       (f.sprite.material as THREE.SpriteMaterial).opacity = 1;
       (f.sprite.material as THREE.SpriteMaterial).rotation = rand(0, Math.PI * 2);
     }
     this.muzzleLight.position.copy(pos);
-    this.muzzleLight.intensity = big ? 26 : 14;
+    this.muzzleLight.intensity = big ? 30 : 18;
+
+    if (dir) {
+      // fire cone pointing downrange
+      this.muzzleConeLife = 0.045;
+      this.muzzleCone.visible = true;
+      this.muzzleCone.position.copy(pos).addScaledVector(dir, 0.16);
+      this.muzzleCone.scale.setScalar(big ? 1.6 : 1);
+      this.muzzleCone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+      (this.muzzleCone.material as THREE.MeshBasicMaterial).opacity = 0.85;
+
+      // hot sparks + a smoke wisp
+      const sparkCount = big ? 4 : 2;
+      for (let i = 0; i < sparkCount; i++) {
+        this.spawnDebris(
+          pos.clone(),
+          dir
+            .clone()
+            .multiplyScalar(rand(4, 9))
+            .add(new THREE.Vector3(rand(-1.4, 1.4), rand(0.4, 1.8), rand(-1.4, 1.4))),
+          [0xffd27a, 0xffb04a][i % 2],
+          rand(0.14, 0.3),
+          rand(0.3, 0.5),
+        );
+      }
+      this.puff(
+        pos.clone().addScaledVector(dir, 0.22),
+        dir.clone().multiplyScalar(rand(0.6, 1.2)).add(new THREE.Vector3(0, rand(0.4, 0.8), 0)),
+        0x9a9086,
+        rand(0.4, 0.65),
+        0.28,
+        2.2,
+      );
+    }
+  }
+
+  /** Tactical smoke: lingering dense cloud that blocks bot line of sight. */
+  spawnSmokeCloud(pos: THREE.Vector3, radius: number, duration: number): void {
+    this.smokeClouds.push({ pos: pos.clone(), radius, ttl: duration, timer: 0 });
+    // initial dense burst
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      const r = rand(0, radius * 0.7);
+      this.puff(
+        pos.clone().add(new THREE.Vector3(Math.cos(a) * r, rand(0.2, 1.6), Math.sin(a) * r)),
+        new THREE.Vector3(rand(-0.4, 0.4), rand(0.3, 0.9), rand(-0.4, 0.4)),
+        0x9aa0a8,
+        rand(2.2, 3.6),
+        rand(1.6, 2.6),
+        1.8,
+      );
+    }
+  }
+
+  /** True if the segment from a to b crosses any active smoke cloud. */
+  segmentBlockedBySmoke(a: THREE.Vector3, b: THREE.Vector3): boolean {
+    for (const c of this.smokeClouds) {
+      // closest point on segment to cloud center
+      const ab = b.clone().sub(a);
+      const t = clamp(c.pos.clone().sub(a).dot(ab) / Math.max(ab.lengthSq(), 0.0001), 0, 1);
+      const closest = a.clone().addScaledVector(ab, t);
+      if (closest.distanceTo(c.pos) < c.radius) return true;
+    }
+    return false;
+  }
+
+  /** Flashbang burst: hard white flash + light. */
+  flashBang(pos: THREE.Vector3): void {
+    this.explosionLight.position.copy(pos).add(new THREE.Vector3(0, 0.6, 0));
+    this.explosionLight.intensity = 140;
+    const f = this.flashes.find((x) => x.life <= 0);
+    if (f) {
+      f.life = 0.12;
+      f.sprite.visible = true;
+      f.sprite.position.copy(pos).add(new THREE.Vector3(0, 0.6, 0));
+      f.sprite.scale.setScalar(6);
+      (f.sprite.material as THREE.SpriteMaterial).opacity = 1;
+    }
   }
 
   tracer(from: THREE.Vector3, to: THREE.Vector3): void {
@@ -377,6 +484,40 @@ export class VfxSystem {
         const k = Math.max(p.life / p.maxLife, 0);
         (p.sprite.material as THREE.SpriteMaterial).opacity = 0.5 * k;
         if (p.life <= 0) p.sprite.visible = false;
+      }
+    }
+
+    // muzzle cone fade
+    if (this.muzzleConeLife > 0) {
+      this.muzzleConeLife -= dt;
+      (this.muzzleCone.material as THREE.MeshBasicMaterial).opacity = Math.max(
+        (this.muzzleConeLife / 0.045) * 0.85,
+        0,
+      );
+      if (this.muzzleConeLife <= 0) this.muzzleCone.visible = false;
+    }
+
+    // tactical smoke clouds: continuous dense emission while alive
+    for (let i = this.smokeClouds.length - 1; i >= 0; i--) {
+      const c = this.smokeClouds[i];
+      c.ttl -= dt;
+      if (c.ttl <= 0) {
+        this.smokeClouds.splice(i, 1);
+        continue;
+      }
+      c.timer -= dt;
+      if (c.timer <= 0) {
+        c.timer = 0.14;
+        const a = rand(0, Math.PI * 2);
+        const r = rand(0, c.radius * 0.75);
+        this.puff(
+          c.pos.clone().add(new THREE.Vector3(Math.cos(a) * r, rand(0.2, 2.0), Math.sin(a) * r)),
+          new THREE.Vector3(rand(-0.3, 0.5), rand(0.25, 0.7), rand(-0.3, 0.3)),
+          0x9aa0a8,
+          rand(2.0, 3.2),
+          rand(1.7, 2.6),
+          1.5,
+        );
       }
     }
 

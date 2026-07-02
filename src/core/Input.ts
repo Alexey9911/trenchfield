@@ -9,7 +9,9 @@ export interface InputIntents {
   ads: boolean;
   reload: boolean;
   grenade: boolean;
-  weaponSlot: 1 | 2 | null;
+  smoke: boolean;
+  flash: boolean;
+  weaponSlot: 1 | 2 | 3 | null;
   scoreboard: boolean;
 }
 
@@ -21,7 +23,9 @@ export class Input {
   private adsHeld = false;
   private reloadPressed = false;
   private grenadePressed = false;
-  private slotPressed: 1 | 2 | null = null;
+  private smokePressed = false;
+  private flashPressed = false;
+  private slotPressed: 1 | 2 | 3 | null = null;
   private locked = false;
   sensitivity = 1.0;
   onPause: () => void = () => {};
@@ -67,11 +71,15 @@ export class Input {
       ads: this.adsHeld,
       reload: this.reloadPressed,
       grenade: this.grenadePressed,
+      smoke: this.smokePressed,
+      flash: this.flashPressed,
       weaponSlot: this.slotPressed,
       scoreboard: this.keys.has('Tab'),
     };
     this.reloadPressed = false;
     this.grenadePressed = false;
+    this.smokePressed = false;
+    this.flashPressed = false;
     this.slotPressed = null;
     return intents;
   }
@@ -88,8 +96,11 @@ export class Input {
     this.keys.add(e.code);
     if (e.code === 'KeyR') this.reloadPressed = true;
     if (e.code === 'KeyG') this.grenadePressed = true;
+    if (e.code === 'KeyF') this.smokePressed = true;
+    if (e.code === 'KeyX') this.flashPressed = true;
     if (e.code === 'Digit1') this.slotPressed = 1;
     if (e.code === 'Digit2') this.slotPressed = 2;
+    if (e.code === 'Digit3') this.slotPressed = 3;
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {

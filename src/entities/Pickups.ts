@@ -74,6 +74,10 @@ export class Pickups {
     scene.add(this.group);
   }
 
+  dispose(scene: THREE.Scene): void {
+    scene.remove(this.group);
+  }
+
   update(dt: number, elapsed: number, playerPos: THREE.Vector3): PickupKind | null {
     let collected: PickupKind | null = null;
     for (const item of this.items) {
