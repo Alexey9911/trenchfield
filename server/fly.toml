@@ -1,10 +1,11 @@
 # TrenchField realtime server — single always-on machine (escrow + lobbies live
 # in RAM: never scale count > 1; multi-region = separate apps).
+# Deploy from this directory: `cd server && fly deploy`
 app = "trenchfield-server"
 primary_region = "iad"
 
 [build]
-  dockerfile = "server/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [env]
   PORT = "8123"
